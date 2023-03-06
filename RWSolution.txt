@@ -1,0 +1,146 @@
+// PSEUDOCODE FILE
+
+class Process
+{
+public:
+    int pID;
+    string state;
+    string role;
+    Process()
+    {
+        this->pID = 0;
+        this->state = "initialized";
+        this->role = "reader";
+        readerProcess(this->pID); // once the process is created it calls its respective function
+    }
+    Process(int pID, string role)
+    {
+        this->pID = pID;
+        this->state = "initialized";
+        this->role = role;
+        if (role == "reader")
+            readerProcess(this->pID);
+        else
+            writerProcess(this->pID);
+    }
+};
+
+class ProcessManager
+{
+public:
+    vector<Process> processes;
+    void addProcess(Process process)
+    {
+        processes.push_back(process);
+    }
+
+    Process getProcess(int pID)
+    {
+        for (int i = 0; i < processes.size(); i++)
+        {
+            if (processes[i].pID == pID)
+            {
+                return processes[i];
+            }
+        }
+        return Process();
+    }
+};
+
+static ProcessManager pm;
+
+class Semaphore
+{
+public:
+    int semaphoreValue;
+    queue<Process> queueOfProcesses;
+
+    Semaphore()
+    {
+        semaphoreValue = 1;
+    }
+    Semaphore(int val)
+    {
+        semaphoreValue = val;
+    }
+    void wait(int pID)
+    {
+        if (this->semaphoreValue <= 0)
+        {
+            pm.getProcess(pID).state = "blocked";
+            queueOfProcesses.push(pm.getProcess(pID));
+        }
+        this->semaphoreValue--;
+    }
+
+    void signal()
+    {
+        this->semaphoreValue++;
+
+        if (this->semaphoreValue > 0)
+        {
+            queueOfProcesses.pop();
+            // And after poping the first process in the queue make a system call to the process so that it checks again
+        }
+    }
+};
+
+// Shared variables
+int readers_count = 0;   // number of readers accessing the critical section
+
+// Semaphores defined
+Semaphore mutex(1);       // mutual exclusion for shared variables
+Semaphore write_mutex(1); // mutual exclusion for writers accessing the critical section
+Semaphore access_mutex(1); // for preventing starvation of writers
+
+void readerProcess(int pID)
+{
+    access_mutex.wait(pID);
+
+		mutex.wait(pID);
+    readers_count++; // increment number of readers accessing the critical section
+    if (readers_count == 1)
+    {
+       // being the first writer aquires the write_mutex
+        write_mutex.wait(pID);
+    }
+    mutex.signal();
+
+		access_mutex.signal();
+   
+		// critical section
+
+    mutex.wait(pID);
+    readers_count--;
+    if (readers_count == 0)
+    {
+        // if this is the last reader, signal any waiting writers
+        write_mutex.signal();
+    }
+    mutex.signal();
+}
+
+void writerProcess(int pID)
+{
+	access_mutex.wait(pID);
+
+	write_mutex.wait(pID);
+
+		// before the process enters the critical section, releases the access_mutex to allow the other process to queue up for the access to critical section after it
+		access_mutex.signal();
+	  
+    // critical section
+
+    write_mutex.signal(); // release the write mutex
+}
+
+    // Reader process
+    int pID = 1000;
+    Process p1(pID, "reader"); // a reader process added
+    pm.processes.push_back(p1);
+    readerProcess(pID);
+    // Writer process
+    int pID = 2000;
+    Process p1(pID, "writer"); // a writer process added
+    pm.processes.push_back(p1);
+    writerProcess(pID);
